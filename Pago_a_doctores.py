@@ -670,6 +670,220 @@ class DashboardPagos:
             st.error(f"Error generando reporte de impresión: {str(e)}")
             return ""
 
+    def generar_reporte_para_doctores(self, doctor_seleccionado, fecha_inicio, fecha_fin):
+        """Generar reporte para doctores optimizado para impresión"""
+        if self.df is None or 'doctor_a_pagar' not in self.df.columns:
+            return ""
+        
+        try:
+            # Filtrar datos
+            df_filtrado = self.filtrar_por_fecha(fecha_inicio, fecha_fin)
+            if doctor_seleccionado != "Todos":
+                df_filtrado = df_filtrado[df_filtrado['doctor_a_pagar'] == doctor_seleccionado]
+            
+            if df_filtrado.empty:
+                return ""
+            
+            # Agrupar por paciente y procedimiento
+            reporte_agrupado = df_filtrado.groupby(['paciente', 'procedimiento']).agg({
+                'laboratorio': 'sum',
+                'gastos': 'sum',
+                'retencion_10': 'sum',
+                'monto_final_pago': 'sum'
+            }).reset_index()
+            
+            # Totales generales
+            total_general = df_filtrado.agg({
+                'laboratorio': 'sum',
+                'gastos': 'sum',
+                'retencion_10': 'sum',
+                'monto_final_pago': 'sum'
+            })
+            
+            # Crear HTML para impresión
+            html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="UTF-8">
+                <title>Reporte para Doctores - {doctor_seleccionado}</title>
+                <style>
+                    body {{
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        margin: 0;
+                        padding: 20px;
+                        color: #333;
+                        line-height: 1.4;
+                    }}
+                    .print-container {{
+                        max-width: 800px;
+                        margin: 0 auto;
+                    }}
+                    .header {{
+                        text-align: center;
+                        margin-bottom: 30px;
+                        border-bottom: 3px solid #007aff;
+                        padding-bottom: 20px;
+                    }}
+                    .header h1 {{
+                        color: #1d1d1f;
+                        margin: 0 0 10px 0;
+                        font-size: 28px;
+                    }}
+                    .header-info {{
+                        display: flex;
+                        justify-content: space-between;
+                        margin-top: 15px;
+                        font-size: 14px;
+                        color: #666;
+                    }}
+                    .summary-grid {{
+                        display: grid;
+                        grid-template-columns: repeat(4, 1fr);
+                        gap: 15px;
+                        margin-bottom: 25px;
+                    }}
+                    .summary-card {{
+                        background: white;
+                        padding: 15px;
+                        border-radius: 12px;
+                        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+                        text-align: center;
+                    }}
+                    .summary-card h3 {{
+                        margin: 0;
+                        font-size: 14px;
+                        color: #666;
+                        font-weight: 500;
+                    }}
+                    .summary-card .value {{
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: #007aff;
+                        margin: 8px 0 0 0;
+                    }}
+                    .table {{
+                        width: 100%;
+                        border-collapse: collapse;
+                        margin: 20px 0;
+                        font-size: 12px;
+                    }}
+                    .table th {{
+                        background: #007aff;
+                        color: white;
+                        padding: 12px;
+                        text-align: left;
+                        font-weight: 500;
+                    }}
+                    .table td {{
+                        padding: 10px;
+                        border-bottom: 1px solid #e5e5e7;
+                    }}
+                    .table tr.total-row {{
+                        background: #f5f7fa;
+                        font-weight: 600;
+                    }}
+                    .table tr.total-row td {{
+                        border-top: 2px solid #007aff;
+                        font-size: 13px;
+                    }}
+                    .footer {{
+                        text-align: center;
+                        margin-top: 40px;
+                        color: #666;
+                        font-size: 12px;
+                        border-top: 1px solid #e5e5e7;
+                        padding-top: 20px;
+                    }}
+                    @media print {{
+                        body {{ padding: 15px; }}
+                        .summary-grid {{ page-break-inside: avoid; }}
+                        .table {{ page-break-inside: avoid; }}
+                    }}
+                </style>
+            </head>
+            <body>
+                <div class="print-container">
+                    <div class="header">
+                        <h1>👨‍⚕️ Reporte para Doctores</h1>
+                        <div class="header-info">
+                            <div>Doctor: <strong>{doctor_seleccionado}</strong></div>
+                            <div>Período: <strong>{fecha_inicio} a {fecha_fin}</strong></div>
+                            <div>Generado: <strong>{datetime.now().strftime('%Y-%m-%d %H:%M')}</strong></div>
+                        </div>
+                    </div>
+                    
+                    <div class="summary-grid">
+                        <div class="summary-card">
+                            <h3>Total Procedimientos</h3>
+                            <div class="value">{len(df_filtrado)}</div>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Total a Pagar</h3>
+                            <div class="value">${total_general['monto_final_pago']:,.2f}</div>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Total Retenido</h3>
+                            <div class="value">${total_general['retencion_10']:,.2f}</div>
+                        </div>
+                        <div class="summary-card">
+                            <h3>Total Gastos</h3>
+                            <div class="value">${total_general['laboratorio'] + total_general['gastos']:,.2f}</div>
+                        </div>
+                    </div>
+                    
+                    <h2>Detalle por Paciente y Procedimiento</h2>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Paciente</th>
+                                <th>Procedimiento</th>
+                                <th>Gastos</th>
+                                <th>Retención</th>
+                                <th>Total a Pagar</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            """
+            
+            # Agregar filas de datos
+            for _, row in reporte_agrupado.iterrows():
+                html_content += f"""
+                            <tr>
+                                <td>{row['paciente']}</td>
+                                <td>{row['procedimiento']}</td>
+                                <td>${row['laboratorio'] + row['gastos']:,.2f}</td>
+                                <td>${row['retencion_10']:,.2f}</td>
+                                <td>${row['monto_final_pago']:,.2f}</td>
+                            </tr>
+                """
+            
+            # Agregar totales
+            html_content += f"""
+                            <tr class="total-row">
+                                <td colspan="2"><strong>TOTAL GENERAL</strong></td>
+                                <td><strong>${total_general['laboratorio'] + total_general['gastos']:,.2f}</strong></td>
+                                <td><strong>${total_general['retencion_10']:,.2f}</strong></td>
+                                <td><strong>${total_general['monto_final_pago']:,.2f}</strong></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div class="footer">
+                        <p>Reporte generado automáticamente por Sistema de Pagos Clínica Padilla</p>
+                        <p>© 2024 Clínica Padilla - Todos los derechos reservados</p>
+                    </div>
+                </div>
+            </body>
+            </html>
+            """
+            
+            return html_content
+            
+        except Exception as e:
+            st.error(f"Error generando reporte para doctores: {str(e)}")
+            return ""
+
     def mostrar_dashboard(self):
         """Render del dashboard"""
         st.markdown('<h1 class="main-header">🏥 Dashboard de Pagos a Doctores</h1>', unsafe_allow_html=True)
@@ -1011,74 +1225,146 @@ class DashboardPagos:
             )
 
         with tab5:
-            st.markdown('<div class="section-header">📊 Reportes de Pagos por Doctor</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-header">📊 Reportes de Pagos</div>', unsafe_allow_html=True)
             
-            # Filtros específicos para el reporte
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                doctor_reporte = st.selectbox(
-                    "Seleccionar Doctor para Reporte",
-                    options=["Todos"] + self.doctores,
-                    key="doctor_reporte"
-                )
+            # Crear pestañas para los diferentes tipos de reportes
+            reporte_tab1, reporte_tab2 = st.tabs(["📋 Reporte de Pagos a Doctores", "👨‍⚕️ Reporte para Doctores"])
             
-            with col2:
-                fecha_inicio_reporte = st.date_input(
-                    "Fecha inicio reporte",
-                    value=fecha_inicio,
-                    key="fecha_inicio_reporte"
-                )
-            
-            with col3:
-                fecha_fin_reporte = st.date_input(
-                    "Fecha fin reporte", 
-                    value=fecha_fin,
-                    key="fecha_fin_reporte"
-                )
-            
-            # Generar reporte para impresión
-            html_reporte = self.generar_reporte_impresion(
-                doctor_reporte,
-                pd.to_datetime(fecha_inicio_reporte),
-                pd.to_datetime(fecha_fin_reporte)
-            )
-            
-            if html_reporte:
-                # Vista previa del reporte
-                st.markdown("### 📋 Vista Previa del Reporte")
-                st.components.v1.html(html_reporte, height=800, scrolling=True)
-                
-                # Botones de descarga
-                col1, col2 = st.columns(2)
-                
+            with reporte_tab1:
+                # Filtros específicos para el reporte de pagos
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.download_button(
-                        label="📄 Descargar Reporte (HTML)",
-                        data=html_reporte,
-                        file_name=f"reporte_{doctor_reporte}_{fecha_inicio_reporte}_a_{fecha_fin_reporte}.html",
-                        mime="text/html",
-                        use_container_width=True
+                    doctor_reporte = st.selectbox(
+                        "Seleccionar Doctor para Reporte",
+                        options=["Todos"] + self.doctores,
+                        key="doctor_reporte"
                     )
                 
                 with col2:
-                    st.download_button(
-                        label="📊 Descargar para Imprimir",
-                        data=html_reporte,
-                        file_name=f"reporte_{doctor_reporte}_{fecha_inicio_reporte}_a_{fecha_fin_reporte}.html",
-                        mime="text/html",
-                        use_container_width=True
+                    fecha_inicio_reporte = st.date_input(
+                        "Fecha inicio reporte",
+                        value=fecha_inicio,
+                        key="fecha_inicio_reporte"
                     )
                 
-                st.info("""
-                **💡 Para imprimir:**
-                1. Descarga el reporte en HTML
-                2. Abre el archivo descargado
-                3. Usa la opción de imprimir de tu navegador (Ctrl+P)
-                4. Ajusta la configuración de impresión a hoja 8 1/2 x 11
-                """)
+                with col3:
+                    fecha_fin_reporte = st.date_input(
+                        "Fecha fin reporte", 
+                        value=fecha_fin,
+                        key="fecha_fin_reporte"
+                    )
                 
-            else:
-                st.info("No hay datos para generar el reporte con los filtros seleccionados")
+                # Generar reporte para impresión
+                html_reporte = self.generar_reporte_impresion(
+                    doctor_reporte,
+                    pd.to_datetime(fecha_inicio_reporte),
+                    pd.to_datetime(fecha_fin_reporte)
+                )
+                
+                if html_reporte:
+                    # Vista previa del reporte
+                    st.markdown("### 📋 Vista Previa del Reporte de Pagos")
+                    st.components.v1.html(html_reporte, height=800, scrolling=True)
+                    
+                    # Botones de descarga
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.download_button(
+                            label="📄 Descargar Reporte (HTML)",
+                            data=html_reporte,
+                            file_name=f"reporte_pagos_{doctor_reporte}_{fecha_inicio_reporte}_a_{fecha_fin_reporte}.html",
+                            mime="text/html",
+                            use_container_width=True
+                        )
+                    
+                    with col2:
+                        st.download_button(
+                            label="🖨️ Descargar para Imprimir",
+                            data=html_reporte,
+                            file_name=f"reporte_pagos_{doctor_reporte}_{fecha_inicio_reporte}_a_{fecha_fin_reporte}.html",
+                            mime="text/html",
+                            use_container_width=True
+                        )
+                    
+                    st.info("""
+                    **💡 Para imprimir:**
+                    1. Descarga el reporte en HTML
+                    2. Abre el archivo descargado
+                    3. Usa la opción de imprimir de tu navegador (Ctrl+P)
+                    4. Ajusta la configuración de impresión a hoja 8 1/2 x 11
+                    """)
+                    
+                else:
+                    st.info("No hay datos para generar el reporte con los filtros seleccionados")
+            
+            with reporte_tab2:
+                # Filtros específicos para el reporte para doctores
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    doctor_reporte_doctores = st.selectbox(
+                        "Seleccionar Doctor",
+                        options=["Todos"] + self.doctores,
+                        key="doctor_reporte_doctores"
+                    )
+                
+                with col2:
+                    fecha_inicio_reporte_doctores = st.date_input(
+                        "Fecha inicio",
+                        value=fecha_inicio,
+                        key="fecha_inicio_reporte_doctores"
+                    )
+                
+                with col3:
+                    fecha_fin_reporte_doctores = st.date_input(
+                        "Fecha fin", 
+                        value=fecha_fin,
+                        key="fecha_fin_reporte_doctores"
+                    )
+                
+                # Generar reporte para doctores
+                html_reporte_doctores = self.generar_reporte_para_doctores(
+                    doctor_reporte_doctores,
+                    pd.to_datetime(fecha_inicio_reporte_doctores),
+                    pd.to_datetime(fecha_fin_reporte_doctores)
+                )
+                
+                if html_reporte_doctores:
+                    # Vista previa del reporte
+                    st.markdown("### 👨‍⚕️ Vista Previa del Reporte para Doctores")
+                    st.components.v1.html(html_reporte_doctores, height=800, scrolling=True)
+                    
+                    # Botones de descarga
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.download_button(
+                            label="📄 Descargar Reporte (HTML)",
+                            data=html_reporte_doctores,
+                            file_name=f"reporte_doctores_{doctor_reporte_doctores}_{fecha_inicio_reporte_doctores}_a_{fecha_fin_reporte_doctores}.html",
+                            mime="text/html",
+                            use_container_width=True
+                        )
+                    
+                    with col2:
+                        st.download_button(
+                            label="🖨️ Descargar para Imprimir",
+                            data=html_reporte_doctores,
+                            file_name=f"reporte_doctores_{doctor_reporte_doctores}_{fecha_inicio_reporte_doctores}_a_{fecha_fin_reporte_doctores}.html",
+                            mime="text/html",
+                            use_container_width=True
+                        )
+                    
+                    st.info("""
+                    **💡 Características del Reporte para Doctores:**
+                    • Muestra solo información relevante para el doctor
+                    • Incluye: Paciente, Procedimiento, Gastos, Retención, Total a Pagar
+                    • Formato optimizado para impresión
+                    • Diseño profesional y fácil de leer
+                    """)
+                    
+                else:
+                    st.info("No hay datos para generar el reporte para doctores con los filtros seleccionados")
 
 # Ejecutar la aplicación
 if __name__ == "__main__":
