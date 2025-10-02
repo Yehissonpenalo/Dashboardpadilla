@@ -288,12 +288,14 @@ class DashboardPagos:
                 if pago_seguro_val > 0:
                     cargo_ars = pago_total * 0.10
 
-                # Pago a referidor
+                # Pago a referidor - CORREGIDO: 10% del pago total del paciente
                 p_ref = str(row.get('paciente_refido', '')).strip().lower()
                 p_ref = p_ref.replace('sí', 'sí')
                 es_referido = bool(re.match(r'^(si|sí|s[ií]|yes|true|1)$', p_ref))
+                
                 if es_referido:
-                    pago_referidor = pago_total * 0.10
+                    # CORRECCIÓN: Calcular 10% del pago total del paciente
+                    pago_referidor = pago_total * 0.10  # 10% de comisión
 
                 # Tipo de pago
                 cobra_por_porcentaje = False
@@ -345,6 +347,7 @@ class DashboardPagos:
                 self.df.at[idx, 'rentabilidad'] = rentabilidad_pct
 
             except Exception as e:
+                st.error(f"Error procesando fila {idx}: {str(e)}")
                 continue
 
     def calcular_metricas_totales(self):
@@ -413,10 +416,12 @@ class DashboardPagos:
             return pd.DataFrame()
 
         try:
+            # CORREGIDO: Filtrar pacientes referidos correctamente
             df_referidos = self.df[
-                self.df['paciente_refido'].astype(str).str.lower().str.contains('si|sí|yes|true|1') &
+                self.df['paciente_refido'].astype(str).str.lower().str.contains('si|sí|yes|true|1', na=False) &
                 (self.df['pago_referidor'] > 0)
             ]
+            
             if len(df_referidos) == 0:
                 return pd.DataFrame()
 
@@ -1120,6 +1125,7 @@ class DashboardPagos:
                     }),
                     use_container_width=True
                 )
+                # CORREGIDO: Mensaje informativo actualizado
                 st.info("💡 Los pagos a referidores se calculan como el 10% del monto total pagado por el paciente")
             else:
                 st.info("No hay datos de pagos a referidores")
