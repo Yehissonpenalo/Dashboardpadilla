@@ -310,13 +310,21 @@ class DashboardPagos:
                         except:
                             porcentaje = 0.5
 
-                    pago_doctor = pago_total * porcentaje
+                    # CORRECCIÓN: Primero restar gastos del ingreso total, luego aplicar porcentaje
                     laboratorio = float(row.get('laboratorio', 0) or 0)
                     gastos = float(row.get('gastos', 0) or 0)
                     descuentos = laboratorio + gastos
-                    pago_doctor = max(0, pago_doctor - descuentos - cargo_ars)
+                    
+                    # Calcular base para el porcentaje (ingreso total menos gastos)
+                    base_para_porcentaje = max(0, pago_total - descuentos - cargo_ars)
+                    
+                    # Aplicar porcentaje al doctor
+                    pago_doctor = base_para_porcentaje * porcentaje
+                    
+                    # Aplicar retención del 10% al pago del doctor
                     retencion = pago_doctor * 0.10
                     pago_doctor = pago_doctor - retencion
+                    
                     descuento_lab = laboratorio
                     descuento_gastos = gastos
 
